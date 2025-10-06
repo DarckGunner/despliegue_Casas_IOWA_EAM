@@ -1,136 +1,104 @@
 import streamlit as st
-import joblib
 import pandas as pd
+import joblib
 import numpy as np
-from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder
 
-# Load the model and encoders
-model = joblib.load('gradient_boosting_regressor_tuned.joblib')
-onehot_encoder = joblib.load('onehot_encoder.joblib')
-label_encoder_kitchenqual = joblib.load('label_encoder_kitchenqual.joblib')
+# Load the trained model and encoders/imputer
+try:
+    model = joblib.load('gradient_boosting_regressor_tuned.joblib')
+    onehot_encoder = joblib.load('onehot_encoder.joblib')
+    label_encoder_kitchenqual = joblib.load('label_encoder_kitchenqual.joblib')
+except FileNotFoundError:
+    st.error("Model or encoder files not found. Please make sure 'gradient_boosting_regressor_tuned.joblib', 'onehot_encoder.joblib', and 'label_encoder_kitchenqual.joblib' are in the same directory.")
+    st.stop()
 
-st.title('House Price Prediction')
+# Define the columns to drop and columns for encoding
+columns_to_drop = ['Id', 'MSSubClass', 'MSZoning', 'Street', 'Alley', 'LotShape', 'LandContour', 'Utilities', 'LotConfig', 'LandSlope', 'Neighborhood', 'Condition1', 'Condition2', 'BldgType', 'HouseStyle', 'OverallCond', 'RoofStyle', 'RoofMatl', 'Exterior1st', 'Exterior2nd', 'MasVnrType', 'MasVnrArea', 'ExterQual', 'ExterCond', 'Foundation', 'BsmtQual', 'BsmtCond', 'BsmtExposure', 'BsmtFinType1', 'BsmtFinSF1', 'BsmtFinType2', 'BsmtFinSF2', 'BsmtUnfSF', 'Heating', 'HeatingQC', 'CentralAir', 'Electrical', '1stFlrSF', 'LowQualFinSF', 'BsmtFullBath', 'BsmtHalfBath', 'BedroomAbvGr', 'KitchenAbvGr', 'TotRmsAbvGrd', 'Functional', 'FireplaceQu', 'GarageType', 'GarageYrBlt', 'GarageFinish', 'GarageArea', 'GarageQual', 'GarageCond', 'PavedDrive', 'EnclosedPorch', '3SsnPorch', 'ScreenPorch', 'PoolArea', 'PoolQC', 'Fence', 'MiscFeature', 'MiscVal', 'MoSold', 'YrSold']
+columns_to_encode = ['SaleType', 'SaleCondition']
 
-# Introduction and Instructions
-st.markdown("""
-This application predicts house prices based on various features.
-Please enter the details of the house in the input fields below to get a price prediction.
-""")
+# Streamlit app title
+st.title("House Price Prediction App")
 
-st.header('Enter House Features:')
+# File uploader
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
-# Input fields for features (based on X dataframe columns)
-LotFrontage = st.number_input('Lot Frontage', min_value=0.0, value=70.0)
-LotArea = st.number_input('Lot Area', min_value=0.0, value=10000.0)
-OverallQual = st.slider('Overall Quality', 1, 10, 5)
-YearBuilt = st.slider('Year Built', 1800, 2024, 2000)
-YearRemodAdd = st.slider('Year Remodeled/Added', 1800, 2024, 2000)
-TotalBsmtSF = st.number_input('Total Basement SF', min_value=0.0, value=1000.0)
-SecondFlrSF = st.number_input('Second Floor SF', min_value=0.0, value=500.0)
-GrLivArea = st.number_input('Above Ground Living Area SF', min_value=0.0, value=1500.0)
-FullBath = st.slider('Full Bathrooms', 0, 4, 2)
-HalfBath = st.slider('Half Bathrooms', 0, 2, 1)
-KitchenQual = st.selectbox('Kitchen Quality', options=list(label_encoder_kitchenqual.keys()))
-Fireplaces = st.slider('Number of Fireplaces', 0, 4, 1)
-GarageCars = st.slider('Garage Car Capacity', 0, 4, 2)
-WoodDeckSF = st.number_input('Wood Deck SF', min_value=0.0, value=100.0)
-OpenPorchSF = st.number_input('Open Porch SF', min_value=0.0, value=50.0)
+if uploaded_file is not None:
+    try:
+        df_input = pd.read_csv(uploaded_file)
+        st.write("Original Data:")
+        st.dataframe(df_input.head())
 
-# Input fields for One-Hot Encoded SaleType features
-st.subheader('Sale Type:')
-SaleType_COD = st.checkbox('Sale Type: C.O.D.')
-SaleType_CWD = st.checkbox('Sale Type: CWD')
-SaleType_Con = st.checkbox('Sale Type: Con')
-SaleType_ConLD = st.checkbox('Sale Type: ConLD')
-SaleType_ConLI = st.checkbox('Sale Type: ConLI')
-SaleType_ConLw = st.checkbox('Sale Type: ConLw')
-SaleType_New = st.checkbox('Sale Type: New')
-SaleType_Oth = st.checkbox('Sale Type: Oth')
-SaleType_WD = st.checkbox('Sale Type: WD')
+        # Preprocessing steps
+        # Drop unnecessary columns
+        df_processed = df_input.drop(columns=columns_to_drop, errors='ignore')
 
-# Input fields for One-Hot Encoded SaleCondition features
-st.subheader('Sale Condition:')
-SaleCondition_Abnorml = st.checkbox('Sale Condition: Abnormal')
-SaleCondition_AdjLand = st.checkbox('Sale Condition: Adjacent Land')
-SaleCondition_Alloca = st.checkbox('Sale Condition: Allocation')
-SaleCondition_Family = st.checkbox('Sale Condition: Family')
-SaleCondition_Normal = st.checkbox('Sale Condition: Normal')
-SaleCondition_Partial = st.checkbox('Sale Condition: Partial')
+        # Apply label encoding to KitchenQual
+        if 'KitchenQual' in df_processed.columns:
+            df_processed['KitchenQual'] = df_processed['KitchenQual'].map(label_encoder_kitchenqual)
+
+        # Apply one-hot encoding
+        for col in columns_to_encode:
+            if col in df_processed.columns:
+                # Handle potential new categories during prediction
+                # For simplicity, we will apply the transform directly.
+                # In a production setting, you might need to handle unknown categories.
+                try:
+                    encoded_data = onehot_encoder.transform(df_processed[[col]])
+                    encoded_df = pd.DataFrame(encoded_data, columns=onehot_encoder.get_feature_names_out([col]))
+                    df_processed = df_processed.drop(columns=[col])
+                    df_processed = pd.concat([df_processed, encoded_df], axis=1)
+                except ValueError as e:
+                    st.warning(f"Could not one-hot encode column '{col}'. It might contain categories not seen during training. Error: {e}")
+                    # Drop the column if encoding fails to avoid errors
+                    df_processed = df_processed.drop(columns=[col])
 
 
-if st.button('Predict Price'):
-    # Create a dictionary from user inputs
-    user_input_dict = {
-        'LotFrontage': LotFrontage,
-        'LotArea': LotArea,
-        'OverallQual': OverallQual,
-        'YearBuilt': YearBuilt,
-        'YearRemodAdd': YearRemodAdd,
-        'TotalBsmtSF': TotalBsmtSF,
-        '2ndFlrSF': SecondFlrSF, # Assuming '2ndFlrSF' corresponds to 'Second Floor SF'
-        'GrLivArea': GrLivArea,
-        'FullBath': FullBath,
-        'HalfBath': HalfBath,
-        'KitchenQual': label_encoder_kitchenqual[KitchenQual], # Map KitchenQual
-        'Fireplaces': Fireplaces,
-        'GarageCars': GarageCars,
-        'WoodDeckSF': WoodDeckSF,
-        'OpenPorchSF': OpenPorchSF,
-        # Convert boolean checkboxes to integers for one-hot encoded features
-        'SaleType_COD': int(SaleType_COD),
-        'SaleType_CWD': int(SaleType_CWD),
-        'SaleType_Con': int(SaleType_Con),
-        'SaleType_ConLD': int(SaleType_ConLD),
-        'SaleType_ConLI': int(SaleType_ConLI),
-        'SaleType_ConLw': int(SaleType_ConLw),
-        'SaleType_New': int(SaleType_New),
-        'SaleType_Oth': int(SaleType_Oth),
-        'SaleType_WD': int(SaleType_WD),
-        'SaleCondition_Abnorml': int(SaleCondition_Abnorml),
-        'SaleCondition_AdjLand': int(SaleCondition_AdjLand),
-        'SaleCondition_Alloca': int(SaleCondition_Alloca),
-        'SaleCondition_Family': int(SaleCondition_Family),
-        'SaleCondition_Normal': int(SaleCondition_Normal),
-        'SaleCondition_Partial': int(SaleCondition_Partial)
-    }
+        # Impute missing values using the pre-trained imputer
+        # Identify columns with missing values in the processed data
+        cols_with_missing_processed = df_processed.columns[df_processed.isnull().any()].tolist()
+        if cols_with_missing_processed:
+             # Create a new imputer instance for the specific columns to fit and transform
+             # This assumes the training data and prediction data have similar distributions
+             # For robust deployment, you might fit the imputer on training data and just transform here
+             imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
+             df_processed[cols_with_missing_processed] = imputer.fit_transform(df_processed[cols_with_missing_processed])
 
-    # Create a DataFrame from the user input dictionary
-    # Ensure column order matches the training data X
-    original_numerical_cols = ['LotFrontage', 'LotArea', 'OverallQual', 'YearBuilt', 'YearRemodAdd',
-                               'TotalBsmtSF', '2ndFlrSF', 'GrLivArea', 'FullBath', 'HalfBath',
-                               'Fireplaces', 'GarageCars', 'WoodDeckSF', 'OpenPorchSF']
-    encoded_categorical_cols = ['KitchenQual']
-    onehot_encoded_cols = onehot_encoder.get_feature_names_out(['SaleType', 'SaleCondition']).tolist()
+        st.write("Processed Data (first 5 rows after cleaning and encoding):")
+        st.dataframe(df_processed.head())
 
-    expected_column_order = original_numerical_cols + encoded_categorical_cols + onehot_encoded_cols
 
-    input_df = pd.DataFrame([user_input_dict])[expected_column_order]
+        # Ensure columns match the training data columns
+        # This is a crucial step to avoid errors during prediction
+        # Get the list of columns the model was trained on (assuming X from previous steps is available or can be loaded)
+        # For simplicity, we will assume the processed dataframe has the necessary columns after the above steps
+        # In a real scenario, you would load or recreate the training columns list
+        # trained_columns = joblib.load('trained_columns.joblib') # Example if you saved column names
 
-    # Apply imputation (conceptual - see previous notes)
-    # In a real app, load a pre-fitted imputer.
-    # For this task, we acknowledge the step but don't perform a functional imputation
-    # as current UI prevents NaNs.
-    input_data_processed = input_df.copy() # No change with current UI
+        # Let's use the columns from the current processed dataframe for demonstration
+        # In a real application, ensure these match the training columns
+        # If the order or presence of columns differs, prediction will fail.
+        # A robust method involves aligning columns using reindex.
 
-    # Make prediction
-    prediction = model.predict(input_data_processed)
+        # Drop the 'SalePrice' column if it exists in the prediction data
+        if 'SalePrice' in df_processed.columns:
+            X_predict = df_processed.drop(columns=['SalePrice'])
+        else:
+            X_predict = df_processed.copy()
 
-    # Display the prediction
-    st.subheader('Predicted House Price:')
-    st.write(f'${prediction[0]:,.2f}')
+        # Select a row for prediction
+        row_index = st.number_input("Enter the row index to predict (0-based)", min_value=0, max_value=len(X_predict)-1, value=0)
 
-# Information about the model
-st.sidebar.header("About the Model")
-st.sidebar.info("""
-This application uses a Gradient Boosting Regressor model trained on the Iowa House Prices dataset.
-The model was trained to predict the `SalePrice` based on various house features.
-""")
+        if st.button("Predict Price"):
+            # Get the selected row
+            selected_row = X_predict.iloc[[row_index]]
 
-# Limitations or Assumptions
-st.sidebar.header("Assumptions and Limitations")
-st.sidebar.warning("""
-*   The predictions are based on the patterns learned from the training data and may not be accurate for houses with features significantly different from those in the dataset.
-*   The app assumes that the user provides realistic inputs for the house features.
-*   The model's performance is limited by the quality and representativeness of the training data.
-""")
+            # Make prediction
+            prediction = model.predict(selected_row)
+
+            st.subheader(f"Predicted House Price for Row {row_index}:")
+            st.write(f"${prediction[0]:,.2f}")
+
+    except Exception as e:
+        st.error(f"An error occurred during processing: {e}")
