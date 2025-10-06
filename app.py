@@ -1,7 +1,3 @@
-import os
-# Evita el error "inotify watch limit reached" en Streamlit Cloud
-os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
-
 import streamlit as st
 import joblib
 import pandas as pd
@@ -9,19 +5,22 @@ import numpy as np
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import SimpleImputer
 
-# =============================
-# Cargar el modelo y los encoders
-# =============================
+# Load the model and encoders
 model = joblib.load('gradient_boosting_regressor_tuned.joblib')
 onehot_encoder = joblib.load('onehot_encoder.joblib')
 label_encoder_kitchenqual = joblib.load('label_encoder_kitchenqual.joblib')
 
-st.title('🏠 House Price Prediction App')
-st.write("Ingresa las características de la vivienda para estimar su precio:")
+st.title('House Price Prediction')
 
-# =============================
-# Entradas del usuario
-# =============================
+# Introduction and Instructions
+st.markdown("""
+This application predicts house prices based on various features.
+Please enter the details of the house in the input fields below to get a price prediction.
+""")
+
+st.header('Enter House Features:')
+
+# Input fields for features (based on X dataframe columns)
 LotFrontage = st.number_input('Lot Frontage', min_value=0.0, value=70.0)
 LotArea = st.number_input('Lot Area', min_value=0.0, value=10000.0)
 OverallQual = st.slider('Overall Quality', 1, 10, 5)
@@ -38,36 +37,30 @@ GarageCars = st.slider('Garage Car Capacity', 0, 4, 2)
 WoodDeckSF = st.number_input('Wood Deck SF', min_value=0.0, value=100.0)
 OpenPorchSF = st.number_input('Open Porch SF', min_value=0.0, value=50.0)
 
-# =============================
-# Sale Type (One-Hot Encoded)
-# =============================
+# Input fields for One-Hot Encoded SaleType features
 st.subheader('Sale Type:')
-SaleType_COD = st.checkbox('C.O.D.')
-SaleType_CWD = st.checkbox('CWD')
-SaleType_Con = st.checkbox('Con')
-SaleType_ConLD = st.checkbox('ConLD')
-SaleType_ConLI = st.checkbox('ConLI')
-SaleType_ConLw = st.checkbox('ConLw')
-SaleType_New = st.checkbox('New')
-SaleType_Oth = st.checkbox('Oth')
-SaleType_WD = st.checkbox('WD')
+SaleType_COD = st.checkbox('Sale Type: C.O.D.')
+SaleType_CWD = st.checkbox('Sale Type: CWD')
+SaleType_Con = st.checkbox('Sale Type: Con')
+SaleType_ConLD = st.checkbox('Sale Type: ConLD')
+SaleType_ConLI = st.checkbox('Sale Type: ConLI')
+SaleType_ConLw = st.checkbox('Sale Type: ConLw')
+SaleType_New = st.checkbox('Sale Type: New')
+SaleType_Oth = st.checkbox('Sale Type: Oth')
+SaleType_WD = st.checkbox('Sale Type: WD')
 
-# =============================
-# Sale Condition (One-Hot Encoded)
-# =============================
+# Input fields for One-Hot Encoded SaleCondition features
 st.subheader('Sale Condition:')
-SaleCondition_Abnorml = st.checkbox('Abnormal')
-SaleCondition_AdjLand = st.checkbox('Adjacent Land')
-SaleCondition_Alloca = st.checkbox('Allocation')
-SaleCondition_Family = st.checkbox('Family')
-SaleCondition_Normal = st.checkbox('Normal')
-SaleCondition_Partial = st.checkbox('Partial')
+SaleCondition_Abnorml = st.checkbox('Sale Condition: Abnormal')
+SaleCondition_AdjLand = st.checkbox('Sale Condition: Adjacent Land')
+SaleCondition_Alloca = st.checkbox('Sale Condition: Allocation')
+SaleCondition_Family = st.checkbox('Sale Condition: Family')
+SaleCondition_Normal = st.checkbox('Sale Condition: Normal')
+SaleCondition_Partial = st.checkbox('Sale Condition: Partial')
 
-# =============================
-# Botón de predicción
-# =============================
-if st.button('🔮 Predict Price'):
-    # Crear diccionario con los datos del usuario
+
+if st.button('Predict Price'):
+    # Create a dictionary from user inputs
     user_input_dict = {
         'LotFrontage': LotFrontage,
         'LotArea': LotArea,
@@ -75,15 +68,16 @@ if st.button('🔮 Predict Price'):
         'YearBuilt': YearBuilt,
         'YearRemodAdd': YearRemodAdd,
         'TotalBsmtSF': TotalBsmtSF,
-        '2ndFlrSF': SecondFlrSF,
+        '2ndFlrSF': SecondFlrSF, # Assuming '2ndFlrSF' corresponds to 'Second Floor SF'
         'GrLivArea': GrLivArea,
         'FullBath': FullBath,
         'HalfBath': HalfBath,
-        'KitchenQual': label_encoder_kitchenqual[KitchenQual],
+        'KitchenQual': label_encoder_kitchenqual[KitchenQual], # Map KitchenQual
         'Fireplaces': Fireplaces,
         'GarageCars': GarageCars,
         'WoodDeckSF': WoodDeckSF,
         'OpenPorchSF': OpenPorchSF,
+        # Convert boolean checkboxes to integers for one-hot encoded features
         'SaleType_COD': int(SaleType_COD),
         'SaleType_CWD': int(SaleType_CWD),
         'SaleType_Con': int(SaleType_Con),
@@ -101,29 +95,42 @@ if st.button('🔮 Predict Price'):
         'SaleCondition_Partial': int(SaleCondition_Partial)
     }
 
-    # Columnas esperadas (orden correcto)
+    # Create a DataFrame from the user input dictionary
+    # Ensure column order matches the training data X
     original_numerical_cols = ['LotFrontage', 'LotArea', 'OverallQual', 'YearBuilt', 'YearRemodAdd',
                                'TotalBsmtSF', '2ndFlrSF', 'GrLivArea', 'FullBath', 'HalfBath',
                                'Fireplaces', 'GarageCars', 'WoodDeckSF', 'OpenPorchSF']
     encoded_categorical_cols = ['KitchenQual']
     onehot_encoded_cols = onehot_encoder.get_feature_names_out(['SaleType', 'SaleCondition']).tolist()
+
     expected_column_order = original_numerical_cols + encoded_categorical_cols + onehot_encoded_cols
 
-    # Crear DataFrame con el orden correcto
     input_df = pd.DataFrame([user_input_dict])[expected_column_order]
 
-    # Copiar a variable procesada (en este caso no hay imputación real)
-    input_data_processed = input_df.copy()
+    # Apply imputation (conceptual - see previous notes)
+    # In a real app, load a pre-fitted imputer.
+    # For this task, we acknowledge the step but don't perform a functional imputation
+    # as current UI prevents NaNs.
+    input_data_processed = input_df.copy() # No change with current UI
 
-    # =============================
-    # Predicción
-    # =============================
-    try:
-        prediction = model.predict(input_data_processed)[0]
-        st.success(f"💰 Estimated House Price: **${prediction:,.2f}**")
-    except Exception as e:
-        st.error(f"⚠️ Error during prediction: {e}")
+    # Make prediction
+    prediction = model.predict(input_data_processed)
 
-    # Mostrar los datos ingresados (opcional, útil para depuración)
-    with st.expander("Ver datos procesados utilizados en la predicción"):
-        st.dataframe(input_data_processed)
+    # Display the prediction
+    st.subheader('Predicted House Price:')
+    st.write(f'${prediction[0]:,.2f}')
+
+# Information about the model
+st.sidebar.header("About the Model")
+st.sidebar.info("""
+This application uses a Gradient Boosting Regressor model trained on the Iowa House Prices dataset.
+The model was trained to predict the `SalePrice` based on various house features.
+""")
+
+# Limitations or Assumptions
+st.sidebar.header("Assumptions and Limitations")
+st.sidebar.warning("""
+*   The predictions are based on the patterns learned from the training data and may not be accurate for houses with features significantly different from those in the dataset.
+*   The app assumes that the user provides realistic inputs for the house features.
+*   The model's performance is limited by the quality and representativeness of the training data.
+""")
